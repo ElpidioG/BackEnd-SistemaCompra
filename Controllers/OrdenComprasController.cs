@@ -1,4 +1,5 @@
-﻿using System;
+﻿
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -23,23 +24,20 @@ namespace BackEnd_SistemaCompra.Controllers
 
         // GET: api/OrdenCompras
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<OrdenCompra>>> GetTbl_OrdenCompra()
+        public async Task<ActionResult<IEnumerable<object>>> GetTbl_OrdenCompra()
         {
-            return await _context.Tbl_OrdenCompra.ToListAsync();
-        }
+            var ordenes = await _context.Tbl_OrdenCompra
+                .Include(o => o.Proveedor) // Incluye la relación del proveedor
+                .Select(o => new
+                {
+                    o.Id,
+                    o.Fecha,
+                    ProveedorNombre = o.Proveedor != null ? o.Proveedor.NombreComercial : "Sin proveedor", // Asegúrate de acceder a la propiedad correcta
+                    o.Estado
+                })
+                .ToListAsync();
 
-        // GET: api/OrdenCompras/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<OrdenCompra>> GetOrdenCompra(int id)
-        {
-            var ordenCompra = await _context.Tbl_OrdenCompra.FindAsync(id);
-
-            if (ordenCompra == null)
-            {
-                return NotFound();
-            }
-
-            return ordenCompra;
+            return Ok(ordenes);
         }
 
         // PUT: api/OrdenCompras/5
@@ -80,24 +78,20 @@ namespace BackEnd_SistemaCompra.Controllers
         // POST: api/OrdenCompras
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
+
         public async Task<ActionResult<OrdenCompra>> PostOrdenCompra(OrdenCompra ordenCompra)
         {
-            if (ordenCompra == null)
+            if (ordenCompra.idProveedor == 0)
             {
-                return BadRequest(new { mensaje = "Los datos enviados son nulos." });
+                return BadRequest("El proveedor es obligatorio.");
             }
 
-            var errores = ValidarOrdenCompra(ordenCompra);
-            if (errores.Any())
-            {
-                return BadRequest(new { errores });
-            }
+            // Guarda la orden de compra
             _context.Tbl_OrdenCompra.Add(ordenCompra);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction("GetOrdenCompra", new { id = ordenCompra.Id }, ordenCompra);
+            return CreatedAtAction(nameof(PostOrdenCompra), new { id = ordenCompra.Id }, ordenCompra);
         }
-
         // DELETE: api/OrdenCompras/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteOrdenCompra(int id)
@@ -125,7 +119,7 @@ namespace BackEnd_SistemaCompra.Controllers
             if (ordenCompra.Fecha == default(DateTime) || ordenCompra.Fecha < DateTime.Today)
                 errores.Add("Debe ingresar una fecha válida y no anterior a hoy.");
 
-            if (ordenCompra.IdProveedor <= 0)
+            if (ordenCompra.idProveedor <= 0)
                 errores.Add("Debe seleccionar un proveedor válido.");
 
             if (ordenCompra.Estado == null)

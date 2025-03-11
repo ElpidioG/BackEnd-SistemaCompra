@@ -21,25 +21,31 @@ namespace BackEnd_SistemaCompra.Controllers
             _context = context;
         }
 
-        // GET: api/DetalleOrdenCompras
-        [HttpGet]
-        public async Task<ActionResult<IEnumerable<DetalleOrdenCompra>>> GetTbl_Detalle_OrdenCompra()
+        // GET: api/DetalleOrdenCompras/Orden/5
+        [HttpGet("Orden/{idOrdenCompra}")]
+        public async Task<ActionResult<IEnumerable<object>>> GetDetallesPorOrden(int idOrdenCompra)
         {
-            return await _context.Tbl_Detalle_OrdenCompra.ToListAsync();
-        }
+            var detalles = await _context.Tbl_Detalle_OrdenCompra
+                .Where(d => d.IdOrdenCompra == idOrdenCompra)
+                .Include(d => d.Articulo) // Asegúrate de que la relación está configurada
+                .Include(d => d.UnidadMedida) // Asegúrate de que la relación está configurada
+                .Select(d => new
+                {
+                    d.Id,
+                    Articulo = d.Articulo.Descripcion, // Devuelve el nombre del artículo
+                    d.Cantidad,
+                    UnidadMedida = d.UnidadMedida.Descripcion, // Devuelve el nombre de la unidad de medida
+                    d.CostoUnitario,
+                    d.CostoTotal
+                })
+                .ToListAsync();
 
-        // GET: api/DetalleOrdenCompras/5
-        [HttpGet("{id}")]
-        public async Task<ActionResult<DetalleOrdenCompra>> GetDetalleOrdenCompra(int id)
-        {
-            var detalleOrdenCompra = await _context.Tbl_Detalle_OrdenCompra.FindAsync(id);
-
-            if (detalleOrdenCompra == null)
+            if (detalles == null || detalles.Count == 0)
             {
                 return NotFound();
             }
 
-            return detalleOrdenCompra;
+            return Ok(detalles);
         }
 
         // PUT: api/DetalleOrdenCompras/5
@@ -51,6 +57,7 @@ namespace BackEnd_SistemaCompra.Controllers
             {
                 return BadRequest();
             }
+            Console.WriteLine("Esto es lo que trae: ", detalleOrdenCompra);
             var errores = ValidarDetalleOrdenCompra(detalleOrdenCompra);
             if (errores.Any())
             {
@@ -81,41 +88,58 @@ namespace BackEnd_SistemaCompra.Controllers
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         // POST: api/DetalleOrdenCompras
         [HttpPost]
-        public async Task<ActionResult<DetalleOrdenCompra>> PostDetalleOrdenCompra(DetalleOrdenCompra detalleOrdenCompra)
+        public async Task<ActionResult> PostDetalleOrdenCompra(List<DetalleOrdenCompra> detallesOrdenCompra)
         {
-            if (detalleOrdenCompra == null)
+            if (detallesOrdenCompra == null || detallesOrdenCompra.Count == 0)
             {
-                return BadRequest(new { mensaje = "Los datos enviados son nulos." });
+                return BadRequest(new { mensaje = "Los datos enviados son nulos o vacíos." });
             }
 
-            var errores = ValidarDetalleOrdenCompra(detalleOrdenCompra);
-            if (errores.Any())
+            foreach (var detalleOrdenCompra in detallesOrdenCompra)
             {
-                return BadRequest(new { errores });
+                var errores = ValidarDetalleOrdenCompra(detalleOrdenCompra);
+                if (errores.Any())
+                {
+                    return BadRequest(new { errores });
+                }
+
+                var articulo = await _context.Tbl_Articulos.FindAsync(detalleOrdenCompra.IdArticulo);
+                if (articulo == null)
+                {
+                    return NotFound(new { mensaje = $"El artículo con ID {detalleOrdenCompra.IdArticulo} no existe." });
+                }
+
+                var unidadMedida = await _context.Tbl_UnidadesMedidas.FindAsync(detalleOrdenCompra.IdUnidadMedida);
+                if (unidadMedida == null)
+                {
+                    return NotFound(new { mensaje = $"La unidad de medida con ID {detalleOrdenCompra.IdUnidadMedida} no existe." });
+                }
+
+                var ordenCompra = await _context.Tbl_OrdenCompra.FindAsync(detalleOrdenCompra.IdOrdenCompra);
+                if (ordenCompra == null)
+                {
+                    return NotFound(new { mensaje = $"La orden de compra con ID {detalleOrdenCompra.IdOrdenCompra} no existe." });
+                }
+
+                // Verificar existencia de artículos
+                if (articulo.Existencia < detalleOrdenCompra.Cantidad)
+                {
+                    return BadRequest(new { mensaje = $"No hay suficiente existencia para el artículo {detalleOrdenCompra.IdArticulo}." });
+                }
+
+                articulo.Existencia -= detalleOrdenCompra.Cantidad;
+                _context.Tbl_Articulos.Update(articulo);
+
+                detalleOrdenCompra.Articulo = articulo;
+                detalleOrdenCompra.UnidadMedida = unidadMedida;
+                detalleOrdenCompra.OrdenCompra = ordenCompra;
+
+                _context.Tbl_Detalle_OrdenCompra.Add(detalleOrdenCompra);
             }
-            var articulo = await _context.Tbl_Articulos.FindAsync(detalleOrdenCompra.IdArticulo);
-            if (articulo == null)
-            {
-                return NotFound(new { mensaje = "El artículo no existe." });
-            }
-
-            if (articulo.Existencia < detalleOrdenCompra.Cantidad)
-            {
-                return BadRequest(new { mensaje = "No hay suficiente existencia del artículo." });
-            }
-
-            articulo.Existencia -= detalleOrdenCompra.Cantidad;
-
-            _context.Tbl_Articulos.Update(articulo);
-
-            _context.Tbl_Detalle_OrdenCompra.Add(detalleOrdenCompra);
 
             await _context.SaveChangesAsync();
-
-            return CreatedAtAction("GetDetalleOrdenCompra", new { id = detalleOrdenCompra.Id }, detalleOrdenCompra);
+            return Ok(new { mensaje = "Detalles de la orden de compra guardados exitosamente." });
         }
-
-
         // DELETE: api/DetalleOrdenCompras/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDetalleOrdenCompra(int id)
