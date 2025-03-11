@@ -79,6 +79,7 @@ namespace BackEnd_SistemaCompra.Controllers
 
         // POST: api/DetalleOrdenCompras
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
+        // POST: api/DetalleOrdenCompras
         [HttpPost]
         public async Task<ActionResult<DetalleOrdenCompra>> PostDetalleOrdenCompra(DetalleOrdenCompra detalleOrdenCompra)
         {
@@ -86,16 +87,34 @@ namespace BackEnd_SistemaCompra.Controllers
             {
                 return BadRequest(new { mensaje = "Los datos enviados son nulos." });
             }
+
             var errores = ValidarDetalleOrdenCompra(detalleOrdenCompra);
             if (errores.Any())
             {
                 return BadRequest(new { errores });
             }
+            var articulo = await _context.Tbl_Articulos.FindAsync(detalleOrdenCompra.IdArticulo);
+            if (articulo == null)
+            {
+                return NotFound(new { mensaje = "El artículo no existe." });
+            }
+
+            if (articulo.Existencia < detalleOrdenCompra.Cantidad)
+            {
+                return BadRequest(new { mensaje = "No hay suficiente existencia del artículo." });
+            }
+
+            articulo.Existencia -= detalleOrdenCompra.Cantidad;
+
+            _context.Tbl_Articulos.Update(articulo);
+
             _context.Tbl_Detalle_OrdenCompra.Add(detalleOrdenCompra);
+
             await _context.SaveChangesAsync();
 
             return CreatedAtAction("GetDetalleOrdenCompra", new { id = detalleOrdenCompra.Id }, detalleOrdenCompra);
         }
+
 
         // DELETE: api/DetalleOrdenCompras/5
         [HttpDelete("{id}")]
