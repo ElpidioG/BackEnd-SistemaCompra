@@ -9,8 +9,11 @@ namespace BackEnd_SistemaCompra.Models
         public string Descripcion { get; set; }
         public string Marca { get; set; }
         public int Existencia { get; set; }
-        public bool Estado { get; set; } = true;
-        public int IdUnidadMedidas { get; set; }
-        public virtual UnidadesMedidas UnidadMedida { get; set; }
+        public bool? Estado { get; set; } = true;
+
+        [ForeignKey("UnidadMedida")]
+        public int? IdUnidadMedidas { get; set; }
+
+        public virtual UnidadesMedidas? UnidadMedida { get; set; }
     }
 }

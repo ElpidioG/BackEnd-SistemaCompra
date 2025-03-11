@@ -24,14 +24,14 @@ namespace BackEnd_SistemaCompra.Controllers
         [HttpGet]
         public async Task<ActionResult<IEnumerable<Articulos>>> GetTbl_Articulos()
         {
-            return await _context.Tbl_Articulos.ToListAsync();
+            return await _context.Tbl_Articulos.Include(a => a.UnidadMedida).ToListAsync();
         }
 
         // GET: api/Articulos/5
         [HttpGet("{id}")]
         public async Task<ActionResult<Articulos>> GetArticulos(int id)
         {
-            var articulos = await _context.Tbl_Articulos.FindAsync(id);
+            var articulos = await _context.Tbl_Articulos.Include(a => a.UnidadMedida).FirstOrDefaultAsync(a => a.Id == id);
             if (articulos == null)
             {
                 return NotFound();
