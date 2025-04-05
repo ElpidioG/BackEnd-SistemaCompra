@@ -20,13 +20,28 @@ namespace BackEnd_SistemaCompra.Controllers
         {
             _context = context;
         }
-
         // GET: api/UnidadesMedidas
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<UnidadesMedidas>>> GetTbl_UnidadesMedidas()
+        public async Task<ActionResult<IEnumerable<UnidadesMedidas>>> GetTbl_UnidadesMedidas([FromQuery] string? descripcion = null)
         {
-            return await _context.Tbl_UnidadesMedidas.ToListAsync();
+            try
+            {
+                var query = _context.Tbl_UnidadesMedidas.AsQueryable();
+
+                if (!string.IsNullOrEmpty(descripcion))
+                {
+                    query = query.Where(u => u.Descripcion.Contains(descripcion));
+                }
+
+                var unidades = await query.ToListAsync();
+                return Ok(unidades);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { message = "Ocurrió un error al obtener las unidades de medida.", error = ex.Message });
+            }
         }
+
 
         // GET: api/UnidadesMedidas/5
         [HttpGet("{id}")]
