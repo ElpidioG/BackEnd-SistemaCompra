@@ -40,20 +40,75 @@ namespace BackEnd_SistemaCompra.Controllers
             return Ok(ordenes);
         }
 
+
+
+
+        // GET: api/OrdenCompras
+        [HttpGet("{id}")]
+        public async Task<IActionResult> GetOrdenCompraPorId(int id)
+        {
+            var ordenCompra = await _context.Tbl_OrdenCompra
+                .Include(o => o.Proveedor)
+                .Include(o => o.Detalles)
+                    .ThenInclude(d => d.Articulo)
+                .Include(o => o.Detalles)
+                    .ThenInclude(d => d.UnidadMedida)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
+            if (ordenCompra == null)
+            {
+                return NotFound();
+            }
+
+            var ordenCompraDTO = new
+            {
+                Id = ordenCompra.Id,
+                Fecha = ordenCompra.Fecha,
+                Proveedor = new
+                {
+                    Id = ordenCompra.idProveedor,
+                    Nombre = ordenCompra.Proveedor?.NombreComercial ?? "(Sin nombre)"
+                },
+                Detalles = ordenCompra.Detalles.Select(d => new
+                {
+                    d.Id,
+                    Articulo = new
+                    {
+                        Id = d.IdArticulo,
+                        Nombre = d.Articulo?.Descripcion ?? "(Sin nombre)"
+                    },
+                    d.Cantidad,
+                    UnidadMedida = new
+                    {
+                        Id = d.IdUnidadMedida,
+                        Nombre = d.UnidadMedida?.Descripcion ?? "(Sin nombre)"
+                    },
+                    PrecioUnitario = d.Articulo.CostoUnitario,
+                    PrecioTotal = d.CostoTotal
+                })
+            };
+
+            return Ok(ordenCompraDTO);
+        }
+
         // PUT: api/OrdenCompras/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
         public async Task<IActionResult> PutOrdenCompra(int id, OrdenCompra ordenCompra)
         {
+            Console.WriteLine($"ID: {ordenCompra.Id}, Proveedor: {ordenCompra.idProveedor}, Estado: {ordenCompra.Estado}, Fecha: {ordenCompra.Fecha}");
+
             if (id != ordenCompra.Id)
             {
-                return BadRequest();
+                return BadRequest("El ID no coincide.");
             }
+
             var errores = ValidarOrdenCompra(ordenCompra);
             if (errores.Any())
             {
                 return BadRequest(new { errores });
             }
+
             _context.Entry(ordenCompra).State = EntityState.Modified;
 
             try
@@ -74,7 +129,6 @@ namespace BackEnd_SistemaCompra.Controllers
 
             return NoContent();
         }
-
         // POST: api/OrdenCompras
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
@@ -96,12 +150,19 @@ namespace BackEnd_SistemaCompra.Controllers
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteOrdenCompra(int id)
         {
-            var ordenCompra = await _context.Tbl_OrdenCompra.FindAsync(id);
+            var ordenCompra = await _context.Tbl_OrdenCompra
+                .Include(o => o.Detalles) // Asegúrate de incluir los detalles relacionados
+                .FirstOrDefaultAsync(o => o.Id == id);
+
             if (ordenCompra == null)
             {
                 return NotFound();
             }
 
+            // Eliminar los detalles primero
+            _context.Tbl_Detalle_OrdenCompra.RemoveRange(ordenCompra.Detalles);
+
+            // Ahora eliminar la orden de compra
             _context.Tbl_OrdenCompra.Remove(ordenCompra);
             await _context.SaveChangesAsync();
 

@@ -27,16 +27,16 @@ namespace BackEnd_SistemaCompra.Controllers
         {
             var detalles = await _context.Tbl_Detalle_OrdenCompra
                 .Where(d => d.IdOrdenCompra == idOrdenCompra)
-                .Include(d => d.Articulo) // Asegúrate de que la relación está configurada
-                .Include(d => d.UnidadMedida) // Asegúrate de que la relación está configurada
+                .Include(d => d.Articulo)
+                .Include(d => d.UnidadMedida)
                 .Select(d => new
                 {
                     d.Id,
-                    Articulo = d.Articulo.Descripcion, // Devuelve el nombre del artículo
+                    Articulo = d.Articulo.Descripcion,
                     d.Cantidad,
-                    UnidadMedida = d.UnidadMedida.Descripcion, // Devuelve el nombre de la unidad de medida
-                    d.CostoUnitario,
-                    d.CostoTotal
+                    UnidadMedida = d.UnidadMedida.Descripcion,
+                    CostoUnitario = d.Articulo.CostoUnitario,
+                    CostoTotal = d.Articulo.CostoUnitario * d.Cantidad
                 })
                 .ToListAsync();
 
@@ -47,7 +47,6 @@ namespace BackEnd_SistemaCompra.Controllers
 
             return Ok(detalles);
         }
-
         // PUT: api/DetalleOrdenCompras/5
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
@@ -87,103 +86,92 @@ namespace BackEnd_SistemaCompra.Controllers
         // POST: api/DetalleOrdenCompras
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         // POST: api/DetalleOrdenCompras
+        // POST: api/DetalleOrdenCompras
         [HttpPost]
-        public async Task<ActionResult> PostDetalleOrdenCompra(List<DetalleOrdenCompra> detallesOrdenCompra)
+        public async Task<IActionResult> PostDetalleOrdenCompra(List<DetalleOrdenCompra> detalles)
         {
-            if (detallesOrdenCompra == null || detallesOrdenCompra.Count == 0)
+            try
             {
-                return BadRequest(new { mensaje = "Los datos enviados son nulos o vacíos." });
-            }
+                if (detalles == null || detalles.Count == 0)
+                {
+                    return BadRequest("No se han proporcionado detalles válidos.");
+                }
 
-            foreach (var detalleOrdenCompra in detallesOrdenCompra)
+                foreach (var detalle in detalles)
+                {
+                    // 1. Verificar si el artículo existe y tiene suficiente existencia
+                    var articulo = await _context.Tbl_Articulos.FindAsync(detalle.IdArticulo);
+                    if (articulo == null)
+                    {
+                        return BadRequest($"El artículo con ID {detalle.IdArticulo} no existe.");
+                    }
+                    if (articulo.Existencia < detalle.Cantidad)
+                    {
+                        return BadRequest($"No hay suficiente existencia para el artículo {articulo.Descripcion}.");
+                    }
+
+                    // 2. Actualizar la existencia del artículo
+                    articulo.Existencia -= detalle.Cantidad;
+                    _context.Tbl_Articulos.Update(articulo);
+
+                    // 3. Agregar el detalle de la orden de compra
+                    _context.Tbl_Detalle_OrdenCompra.Add(detalle);
+                }
+
+                await _context.SaveChangesAsync();
+                return CreatedAtAction(nameof(PostDetalleOrdenCompra), detalles);
+            }
+            catch (Exception ex)
             {
-                var errores = ValidarDetalleOrdenCompra(detalleOrdenCompra);
-                if (errores.Any())
-                {
-                    return BadRequest(new { errores });
-                }
-
-                var articulo = await _context.Tbl_Articulos.FindAsync(detalleOrdenCompra.IdArticulo);
-                if (articulo == null)
-                {
-                    return NotFound(new { mensaje = $"El artículo con ID {detalleOrdenCompra.IdArticulo} no existe." });
-                }
-
-                var unidadMedida = await _context.Tbl_UnidadesMedidas.FindAsync(detalleOrdenCompra.IdUnidadMedida);
-                if (unidadMedida == null)
-                {
-                    return NotFound(new { mensaje = $"La unidad de medida con ID {detalleOrdenCompra.IdUnidadMedida} no existe." });
-                }
-
-                var ordenCompra = await _context.Tbl_OrdenCompra.FindAsync(detalleOrdenCompra.IdOrdenCompra);
-                if (ordenCompra == null)
-                {
-                    return NotFound(new { mensaje = $"La orden de compra con ID {detalleOrdenCompra.IdOrdenCompra} no existe." });
-                }
-
-                // Verificar existencia de artículos
-                if (articulo.Existencia < detalleOrdenCompra.Cantidad)
-                {
-                    return BadRequest(new { mensaje = $"No hay suficiente existencia para el artículo {detalleOrdenCompra.IdArticulo}." });
-                }
-
-                articulo.Existencia -= detalleOrdenCompra.Cantidad;
-                _context.Tbl_Articulos.Update(articulo);
-
-                detalleOrdenCompra.Articulo = articulo;
-                detalleOrdenCompra.UnidadMedida = unidadMedida;
-                detalleOrdenCompra.OrdenCompra = ordenCompra;
-
-                _context.Tbl_Detalle_OrdenCompra.Add(detalleOrdenCompra);
+                Console.WriteLine($"Error al procesar detalles: {ex.Message}");
+                return StatusCode(500, "Error interno del servidor.");
             }
-
-            await _context.SaveChangesAsync();
-            return Ok(new { mensaje = "Detalles de la orden de compra guardados exitosamente." });
         }
         // DELETE: api/DetalleOrdenCompras/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteDetalleOrdenCompra(int id)
         {
-            var detalleOrdenCompra = await _context.Tbl_Detalle_OrdenCompra.FindAsync(id);
+            var detalleOrdenCompra = await _context.Tbl_Detalle_OrdenCompra
+                .Include(d => d.Articulo)  // Incluir la relación con el artículo
+                .FirstOrDefaultAsync(d => d.Id == id);
+
             if (detalleOrdenCompra == null)
             {
-                return NotFound();
+                return NotFound(new { mensaje = "Detalle de la orden de compra no encontrado." });
             }
 
+      
+            // Revertir la cantidad al artículo, sumando de vuelta lo que se había restado
+            detalleOrdenCompra.Articulo.Existencia += detalleOrdenCompra.Cantidad;
+            _context.Tbl_Articulos.Update(detalleOrdenCompra.Articulo);
+
+            // Eliminar el detalle de la orden de compra
             _context.Tbl_Detalle_OrdenCompra.Remove(detalleOrdenCompra);
+
             await _context.SaveChangesAsync();
 
-            return NoContent();
+            return NoContent();  // Confirmar la eliminación exitosa
         }
 
         private bool DetalleOrdenCompraExists(int id)
         {
             return _context.Tbl_Detalle_OrdenCompra.Any(e => e.Id == id);
         }
-        private List<string> ValidarDetalleOrdenCompra(DetalleOrdenCompra detalleOrdenCompra)
+        private List<string> ValidarDetalleOrdenCompra(DetalleOrdenCompra detalle)
         {
             var errores = new List<string>();
 
-            if (detalleOrdenCompra.IdUnidadMedida <= 0)
-                errores.Add("Debe seleccionar un unidad de medida valida.");
+            if (detalle.IdUnidadMedida <= 0)
+                errores.Add("Debe seleccionar una unidad de medida válida.");
 
-            if (detalleOrdenCompra.IdArticulo <= 0)
+            if (detalle.IdArticulo <= 0)
                 errores.Add("Debe seleccionar un artículo válido.");
 
-            if (detalleOrdenCompra.IdOrdenCompra <= 0)
+            if (detalle.IdOrdenCompra <= 0)
                 errores.Add("El número de orden de compra no es válido.");
 
-            if (detalleOrdenCompra.Cantidad <= 0)
+            if (detalle.Cantidad <= 0)
                 errores.Add("Debe seleccionar una cantidad válida mayor a 0.");
-
-            if (detalleOrdenCompra.CostoUnitario <= 0)
-                errores.Add("Debe ingresar un costo unitario válido mayor a 0.");
-
-            if (detalleOrdenCompra.CostoTotal <= 0)
-                errores.Add("Debe ingresar un costo total válido mayor a 0.");
-
-            if (detalleOrdenCompra.CostoTotal != detalleOrdenCompra.Cantidad * detalleOrdenCompra.CostoUnitario)
-                errores.Add("El costo total debe ser igual a la cantidad multiplicada por el costo unitario.");
 
             return errores;
         }

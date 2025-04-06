@@ -9,6 +9,10 @@ namespace BackEnd_SistemaCompra.Models
         public string Descripcion { get; set; }
         public string Marca { get; set; }
         public int Existencia { get; set; }
+
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal CostoUnitario { get; set; }  // ✅ Agregado aquí
+
         public bool? Estado { get; set; } = true;
 
         [ForeignKey("UnidadMedida")]
