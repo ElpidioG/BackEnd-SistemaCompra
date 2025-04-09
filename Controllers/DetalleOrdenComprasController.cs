@@ -84,9 +84,6 @@ namespace BackEnd_SistemaCompra.Controllers
         }
 
         // POST: api/DetalleOrdenCompras
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
-        // POST: api/DetalleOrdenCompras
-        // POST: api/DetalleOrdenCompras
         [HttpPost]
         public async Task<IActionResult> PostDetalleOrdenCompra(List<DetalleOrdenCompra> detalles)
         {
@@ -97,9 +94,10 @@ namespace BackEnd_SistemaCompra.Controllers
                     return BadRequest("No se han proporcionado detalles válidos.");
                 }
 
+                int idOrdenCompra = detalles.First().IdOrdenCompra;
+
                 foreach (var detalle in detalles)
                 {
-                    // 1. Verificar si el artículo existe y tiene suficiente existencia
                     var articulo = await _context.Tbl_Articulos.FindAsync(detalle.IdArticulo);
                     if (articulo == null)
                     {
@@ -110,13 +108,36 @@ namespace BackEnd_SistemaCompra.Controllers
                         return BadRequest($"No hay suficiente existencia para el artículo {articulo.Descripcion}.");
                     }
 
-                    // 2. Actualizar la existencia del artículo
+                    // Actualizar la existencia del artículo
                     articulo.Existencia -= detalle.Cantidad;
                     _context.Tbl_Articulos.Update(articulo);
 
-                    // 3. Agregar el detalle de la orden de compra
+                    // Agregar el detalle de la orden de compra
                     _context.Tbl_Detalle_OrdenCompra.Add(detalle);
                 }
+
+                // Guardar los detalles de la orden de compra antes de calcular el asiento
+                await _context.SaveChangesAsync();
+
+                // Ahora calcular el monto total después de guardar los detalles
+                decimal montoTotal = await _context.Tbl_Detalle_OrdenCompra
+                    .Where(d => d.IdOrdenCompra == idOrdenCompra)
+                    .SumAsync(d => d.CostoTotal);
+
+                // Insertar el asiento contable después de confirmar la inserción
+                var asiento = new AsientoContable
+                {
+                    IdAsiento = 80,
+                    Descripcion = "Compra registrada - Orden " + idOrdenCompra,
+                    IdTipoInventario = 1,
+                    CuentaContable = "5",
+                    TipoMovimiento = "DB",
+                    FechaAsiento = DateTime.Now,
+                    Monto = montoTotal,
+                    Estado = true
+                };
+
+                _context.Tbl_AsientosContables.Add(asiento);
 
                 await _context.SaveChangesAsync();
                 return CreatedAtAction(nameof(PostDetalleOrdenCompra), detalles);

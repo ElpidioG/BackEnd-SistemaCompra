@@ -40,9 +40,6 @@ namespace BackEnd_SistemaCompra.Controllers
             return Ok(ordenes);
         }
 
-
-
-
         // GET: api/OrdenCompras
         [HttpGet("{id}")]
         public async Task<IActionResult> GetOrdenCompraPorId(int id)
@@ -109,7 +106,45 @@ namespace BackEnd_SistemaCompra.Controllers
                 return BadRequest(new { errores });
             }
 
+            // Actualiza el estado de la orden de compra
             _context.Entry(ordenCompra).State = EntityState.Modified;
+
+            // Verificamos si la orden fue inactivada (estado = 0)
+            if (ordenCompra.Estado == false)
+            {
+                // Eliminar el asiento contable relacionado con la orden inactivada
+                var asientoContable = await _context.Tbl_AsientosContables
+                    .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
+
+                if (asientoContable != null)
+                {
+                    _context.Tbl_AsientosContables.Remove(asientoContable);
+                }
+            }
+            else if (ordenCompra.Estado == true)
+            {
+                // Si la orden está activa y no existe un asiento contable, lo creamos
+                var asientoContableExistente = await _context.Tbl_AsientosContables
+                    .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
+
+                if (asientoContableExistente == null)
+                {
+                    var nuevoAsientoContable = new AsientoContable
+                    {
+                        IdAsiento = 80, // Asumiendo que el ID del asiento es 80 para todas las compras
+                        Descripcion = "Compra registrada - Orden " + ordenCompra.Id,
+                        IdTipoInventario = 1,
+                        CuentaContable = "5",
+                        TipoMovimiento = "DB",
+                        FechaAsiento = DateTime.Now,
+                        Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal), // Suponiendo que se suma el total de la orden
+                        Estado = true
+                    };
+
+                    // Agregar el nuevo asiento contable a la base de datos
+                    _context.Tbl_AsientosContables.Add(nuevoAsientoContable);
+                }
+            }
 
             try
             {
@@ -129,6 +164,7 @@ namespace BackEnd_SistemaCompra.Controllers
 
             return NoContent();
         }
+
         // POST: api/OrdenCompras
         // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
@@ -159,15 +195,38 @@ namespace BackEnd_SistemaCompra.Controllers
                 return NotFound();
             }
 
-            // Eliminar los detalles primero
-            _context.Tbl_Detalle_OrdenCompra.RemoveRange(ordenCompra.Detalles);
+            // Eliminar los detalles primero, asegurándote de que no haya detalles huérfanos
+            if (ordenCompra.Detalles.Any())
+            {
+                _context.Tbl_Detalle_OrdenCompra.RemoveRange(ordenCompra.Detalles);
+            }
 
             // Ahora eliminar la orden de compra
             _context.Tbl_OrdenCompra.Remove(ordenCompra);
-            await _context.SaveChangesAsync();
+
+            // Si no quedan detalles, eliminamos el asiento contable asociado
+            var asientoContable = await _context.Tbl_AsientosContables
+                .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
+
+            if (asientoContable != null)
+            {
+                _context.Tbl_AsientosContables.Remove(asientoContable);
+            }
+
+            try
+            {
+                // Guardar los cambios en la base de datos
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException ex)
+            {
+                // Maneja cualquier excepción que ocurra durante la actualización
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error al eliminar la orden de compra y sus detalles.");
+            }
 
             return NoContent();
         }
+
 
         private bool OrdenCompraExists(int id)
         {

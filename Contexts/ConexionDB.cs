@@ -15,5 +15,6 @@ namespace BackEnd_SistemaCompra.Contexts
         public DbSet<Articulos> Tbl_Articulos { get; set; }
         public DbSet<OrdenCompra> Tbl_OrdenCompra { get; set; }
         public DbSet<DetalleOrdenCompra> Tbl_Detalle_OrdenCompra { get; set; }
+        public DbSet<AsientoContable> Tbl_AsientosContables { get; set; }
     }
 }
