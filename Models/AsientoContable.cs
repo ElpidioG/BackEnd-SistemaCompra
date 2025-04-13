@@ -5,7 +5,7 @@ namespace BackEnd_SistemaCompra.Models
     public class AsientoContable
     {
         public int Id{ get; set; }
-        public int IdAsiento { get; set; }
+        public int sistemaAuxiliarId { get; set; }
         public string Descripcion { get; set; }
         public int IdTipoInventario { get; set; }
         public string CuentaContable { get; set; }

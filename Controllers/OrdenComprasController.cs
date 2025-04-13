@@ -1,5 +1,4 @@
-﻿
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -27,12 +26,12 @@ namespace BackEnd_SistemaCompra.Controllers
         public async Task<ActionResult<IEnumerable<object>>> GetTbl_OrdenCompra()
         {
             var ordenes = await _context.Tbl_OrdenCompra
-                .Include(o => o.Proveedor) // Incluye la relación del proveedor
+                .Include(o => o.Proveedor)
                 .Select(o => new
                 {
                     o.Id,
                     o.Fecha,
-                    ProveedorNombre = o.Proveedor != null ? o.Proveedor.NombreComercial : "Sin proveedor", // Asegúrate de acceder a la propiedad correcta
+                    ProveedorNombre = o.Proveedor != null ? o.Proveedor.NombreComercial : "Sin proveedor",
                     o.Estado
                 })
                 .ToListAsync();
@@ -40,7 +39,7 @@ namespace BackEnd_SistemaCompra.Controllers
             return Ok(ordenes);
         }
 
-        // GET: api/OrdenCompras
+        // GET: api/OrdenCompras/5
         [HttpGet("{id}")]
         public async Task<IActionResult> GetOrdenCompraPorId(int id)
         {
@@ -89,7 +88,6 @@ namespace BackEnd_SistemaCompra.Controllers
         }
 
         // PUT: api/OrdenCompras/5
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPut("{id}")]
         public async Task<IActionResult> PutOrdenCompra(int id, OrdenCompra ordenCompra)
         {
@@ -106,43 +104,17 @@ namespace BackEnd_SistemaCompra.Controllers
                 return BadRequest(new { errores });
             }
 
-            // Actualiza el estado de la orden de compra
             _context.Entry(ordenCompra).State = EntityState.Modified;
 
-            // Verificamos si la orden fue inactivada (estado = 0)
+            // Eliminar el asiento contable si la orden fue inactivada
             if (ordenCompra.Estado == false)
             {
-                // Eliminar el asiento contable relacionado con la orden inactivada
                 var asientoContable = await _context.Tbl_AsientosContables
                     .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
 
                 if (asientoContable != null)
                 {
                     _context.Tbl_AsientosContables.Remove(asientoContable);
-                }
-            }
-            else if (ordenCompra.Estado == true)
-            {
-                // Si la orden está activa y no existe un asiento contable, lo creamos
-                var asientoContableExistente = await _context.Tbl_AsientosContables
-                    .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
-
-                if (asientoContableExistente == null)
-                {
-                    var nuevoAsientoContable = new AsientoContable
-                    {
-                        IdAsiento = 80, // Asumiendo que el ID del asiento es 80 para todas las compras
-                        Descripcion = "Compra registrada - Orden " + ordenCompra.Id,
-                        IdTipoInventario = 1,
-                        CuentaContable = "5",
-                        TipoMovimiento = "DB",
-                        FechaAsiento = DateTime.Now,
-                        Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal), // Suponiendo que se suma el total de la orden
-                        Estado = true
-                    };
-
-                    // Agregar el nuevo asiento contable a la base de datos
-                    _context.Tbl_AsientosContables.Add(nuevoAsientoContable);
                 }
             }
 
@@ -166,9 +138,7 @@ namespace BackEnd_SistemaCompra.Controllers
         }
 
         // POST: api/OrdenCompras
-        // To protect from overposting attacks, see https://go.microsoft.com/fwlink/?linkid=2123754
         [HttpPost]
-
         public async Task<ActionResult<OrdenCompra>> PostOrdenCompra(OrdenCompra ordenCompra)
         {
             if (ordenCompra.idProveedor == 0)
@@ -176,18 +146,18 @@ namespace BackEnd_SistemaCompra.Controllers
                 return BadRequest("El proveedor es obligatorio.");
             }
 
-            // Guarda la orden de compra
             _context.Tbl_OrdenCompra.Add(ordenCompra);
             await _context.SaveChangesAsync();
 
             return CreatedAtAction(nameof(PostOrdenCompra), new { id = ordenCompra.Id }, ordenCompra);
         }
+
         // DELETE: api/OrdenCompras/5
         [HttpDelete("{id}")]
         public async Task<IActionResult> DeleteOrdenCompra(int id)
         {
             var ordenCompra = await _context.Tbl_OrdenCompra
-                .Include(o => o.Detalles) // Asegúrate de incluir los detalles relacionados
+                .Include(o => o.Detalles)
                 .FirstOrDefaultAsync(o => o.Id == id);
 
             if (ordenCompra == null)
@@ -195,16 +165,13 @@ namespace BackEnd_SistemaCompra.Controllers
                 return NotFound();
             }
 
-            // Eliminar los detalles primero, asegurándote de que no haya detalles huérfanos
             if (ordenCompra.Detalles.Any())
             {
                 _context.Tbl_Detalle_OrdenCompra.RemoveRange(ordenCompra.Detalles);
             }
 
-            // Ahora eliminar la orden de compra
             _context.Tbl_OrdenCompra.Remove(ordenCompra);
 
-            // Si no quedan detalles, eliminamos el asiento contable asociado
             var asientoContable = await _context.Tbl_AsientosContables
                 .FirstOrDefaultAsync(a => a.Descripcion == "Compra registrada - Orden " + ordenCompra.Id);
 
@@ -215,23 +182,21 @@ namespace BackEnd_SistemaCompra.Controllers
 
             try
             {
-                // Guardar los cambios en la base de datos
                 await _context.SaveChangesAsync();
             }
             catch (DbUpdateException ex)
             {
-                // Maneja cualquier excepción que ocurra durante la actualización
                 return StatusCode(StatusCodes.Status500InternalServerError, "Error al eliminar la orden de compra y sus detalles.");
             }
 
             return NoContent();
         }
 
-
         private bool OrdenCompraExists(int id)
         {
             return _context.Tbl_OrdenCompra.Any(e => e.Id == id);
         }
+
         private List<string> ValidarOrdenCompra(OrdenCompra ordenCompra)
         {
             var errores = new List<string>();
@@ -250,5 +215,66 @@ namespace BackEnd_SistemaCompra.Controllers
             return errores;
         }
 
+        [HttpPost("{id}/asiento")]
+        public async Task<IActionResult> CrearAsientoContable(int id)
+        {
+            var ordenCompra = await _context.Tbl_OrdenCompra
+                .Include(o => o.Detalles)
+                .FirstOrDefaultAsync(o => o.Id == id);
+
+            if (ordenCompra == null)
+            {
+                return NotFound("Orden de compra no encontrada.");
+            }
+
+            // Verificar si ya existe un asiento contable para esta orden
+            var asientoContableExistente = await _context.Tbl_AsientosContables
+                .FirstOrDefaultAsync(a => a.Descripcion == $"Compra registrada - Orden {ordenCompra.Id} (Débito)");
+
+            if (asientoContableExistente != null)
+            {
+                return BadRequest("Ya existe un asiento contable para esta orden.");
+            }
+
+            // Crear el nuevo asiento contable
+            // Débito en la cuenta 80
+            var asientoDebito = new AsientoContable
+            {
+                sistemaAuxiliarId = 80,
+                Descripcion = $"Compra registrada - Orden {ordenCompra.Id}",
+                IdTipoInventario = 1, // Ajusta según tu lógica
+                CuentaContable = "80",
+                TipoMovimiento = "DB",
+                FechaAsiento = DateTime.Now,
+                Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal),
+                Estado = true
+            };
+
+            // Crédito en la cuenta 4
+            var asientoCredito = new AsientoContable
+            {
+                sistemaAuxiliarId = 80, // Puedes usar un ID diferente para el crédito
+                Descripcion = $"Compra registrada - Orden {ordenCompra.Id}",
+                IdTipoInventario = 1, // Ajusta según tu lógica
+                CuentaContable = "4",
+                TipoMovimiento = "CR",
+                FechaAsiento = DateTime.Now,
+                Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal),
+                Estado = true
+            };
+
+            _context.Tbl_AsientosContables.Add(asientoDebito);
+            _context.Tbl_AsientosContables.Add(asientoCredito);
+
+            try
+            {
+                await _context.SaveChangesAsync();
+                return Ok("Asiento contable creado exitosamente.");
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, "Error al crear el asiento contable.");
+            }
+        }
     }
 }

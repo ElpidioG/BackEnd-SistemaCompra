@@ -124,21 +124,7 @@ namespace BackEnd_SistemaCompra.Controllers
                     .Where(d => d.IdOrdenCompra == idOrdenCompra)
                     .SumAsync(d => d.CostoTotal);
 
-                // Insertar el asiento contable después de confirmar la inserción
-                var asiento = new AsientoContable
-                {
-                    IdAsiento = 80,
-                    Descripcion = "Compra registrada - Orden " + idOrdenCompra,
-                    IdTipoInventario = 1,
-                    CuentaContable = "5",
-                    TipoMovimiento = "DB",
-                    FechaAsiento = DateTime.Now,
-                    Monto = montoTotal,
-                    Estado = true
-                };
-
-                _context.Tbl_AsientosContables.Add(asiento);
-
+             
                 await _context.SaveChangesAsync();
                 return CreatedAtAction(nameof(PostDetalleOrdenCompra), detalles);
             }

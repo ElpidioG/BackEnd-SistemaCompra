@@ -9,7 +9,7 @@ namespace BackEnd_SistemaCompra
         public static void Main(string[] args)
         {
             var builder = WebApplication.CreateBuilder(args);
-
+            builder.Services.AddHttpClient();
             // Add services to the container.
             builder.Services.AddDbContext<ConexionDB>(options => options.UseSqlServer(builder.Configuration.GetConnectionString("ConexionSql")));
 
