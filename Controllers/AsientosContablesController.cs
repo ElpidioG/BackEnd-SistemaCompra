@@ -100,104 +100,6 @@ namespace BackEnd_SistemaCompra.Controllers
 
 
 
-        // PUT: api/AsientosContables/5
-
-        [HttpPut("{id}")]
-
-        public async Task<IActionResult> PutAsientosContables(int id, AsientoContable asientosContables)
-
-        {
-
-            if (id != asientosContables.Id)
-
-            {
-
-                return BadRequest("El ID del asiento no coincide con el ID de la solicitud.");
-
-            }
-
-
-
-            var errores = ValidarAsientoContable(asientosContables);
-
-
-
-            if (errores.Any())
-
-            {
-
-                return BadRequest(new { errores });
-
-            }
-
-
-
-            try
-
-            {
-
-                // Verificar si el asiento ya fue enviado a contabilidad
-
-
-
-                if (asientosContables.Estado == false)
-
-                {
-
-                    await EnviarAsientoAContabilidad(new List<AsientoContable> { asientosContables }); // Enviar el asiento a contabilidad
-
-                    asientosContables.Estado = true; // Actualizar el estado a "enviado"
-
-                }
-
-
-
-                _context.Entry(asientosContables).State = EntityState.Modified;
-
-                await _context.SaveChangesAsync();
-
-
-
-                return NoContent();
-
-            }
-
-            catch (DbUpdateConcurrencyException)
-
-            {
-
-                if (!AsientosContablesExists(id))
-
-                {
-
-                    return NotFound();
-
-                }
-
-                else
-
-                {
-
-                    throw;
-
-                }
-
-            }
-
-            catch (Exception ex)
-
-            {
-
-                // Registra los detalles de la excepción para depurar
-
-                Console.WriteLine($"Error al actualizar o enviar el asiento contable: {ex}");
-
-                return StatusCode(StatusCodes.Status500InternalServerError, $"Error al actualizar o enviar el asiento contable: {ex.Message}");
-
-            }
-
-        }
-
         // DELETE: api/AsientosContables/5
 
         [HttpDelete("{id}")]
@@ -215,6 +117,8 @@ namespace BackEnd_SistemaCompra.Controllers
                 return NotFound();
 
             }
+
+
 
 
 
@@ -303,7 +207,6 @@ namespace BackEnd_SistemaCompra.Controllers
             }
 
         }
-
         private async Task EnviarAsientoAContabilidad(List<AsientoContable> asientosContables)
         {
             if (asientosContables == null || asientosContables.Count == 0)
@@ -312,12 +215,15 @@ namespace BackEnd_SistemaCompra.Controllers
             }
 
             // Agrupar asientos por descripción
-            var asientosAgrupados = asientosContables.GroupBy(a => a.Descripcion);
+            var asientosAgrupados = asientosContables.GroupBy(a => a.IdOrdenCompra);
+            Console.WriteLine("Este es el grupo: ", asientosContables.GroupBy(a => a.IdOrdenCompra));
 
-            var asientosContablesDTOs = new List<object>(); // Lista para almacenar los DTOs de los asientos
 
             foreach (var grupo in asientosAgrupados)
             {
+                Console.WriteLine("Este es el grupo:", grupo.ToString());
+
+                var descripcionConcatenada = string.Join(" y ", grupo.Select(a => a.Descripcion).Distinct());
                 var primerAsiento = grupo.First(); // Usamos el primer asiento para la información general
                 var detalles = new List<object>();
                 var debito = grupo.FirstOrDefault(a => a.TipoMovimiento == "DB");
@@ -331,6 +237,7 @@ namespace BackEnd_SistemaCompra.Controllers
                         montoAsiento = Convert.ToDouble(debito.Monto),
                         tipoMovimiento = "DB"
                     });
+                    Console.WriteLine($"After adding debito, count: {detalles.Count}");
                 }
 
                 if (credito != null)
@@ -341,8 +248,11 @@ namespace BackEnd_SistemaCompra.Controllers
                         montoAsiento = Convert.ToDouble(credito.Monto),
                         tipoMovimiento = "CR"
                     });
+                    Console.WriteLine($"After adding credito, count: {detalles.Count}");
                 }
 
+                Console.WriteLine("Estos son los detalles: ", detalles);
+                Console.WriteLine("Esta transacción tiene este numero de detalles: ", detalles.Count);
                 // Validación adicional: Asegurar que haya al menos dos detalles
                 if (detalles.Count < 2)
                 {
@@ -350,27 +260,19 @@ namespace BackEnd_SistemaCompra.Controllers
                     continue; // Omitir el envío de este asiento
                 }
 
-                var asientoContableDTO = new
+                var asientoParaEnviar = new
                 {
-                    descripcion = primerAsiento.Descripcion,
+                    descripcion = descripcionConcatenada,
                     sistemaAuxiliarId = primerAsiento.sistemaAuxiliarId,
                     fechaAsiento = primerAsiento.FechaAsiento,
                     detalles = detalles
                 };
 
-                asientosContablesDTOs.Add(asientoContableDTO); // Agregar el DTO a la lista
-            }
-
-            // Enviar todos los DTOs a la API de contabilidad, envueltos en el objeto 'dto'
-            if (asientosContablesDTOs.Count > 0)
-            {
-                // Agregar registro para ver los datos que se están enviando
+                // Enviar cada asiento individualmente a la API de contabilidad
                 Console.WriteLine("Datos enviados a la API de contabilidad:");
-                var dtoWrapper = new { dto = asientosContablesDTOs }; // Envolver la lista en un objeto 'dto'
-                string json = JsonSerializer.Serialize(dtoWrapper, new JsonSerializerOptions { WriteIndented = true });
+                string json = JsonSerializer.Serialize(asientoParaEnviar, new JsonSerializerOptions { WriteIndented = true });
                 Console.WriteLine(json); // Imprimir el JSON completo
 
-             
                 var content = new StringContent(json, Encoding.UTF8, "application/json");
 
                 if (HttpContext.Request.Headers.ContainsKey("Authorization"))
@@ -390,19 +292,28 @@ namespace BackEnd_SistemaCompra.Controllers
 
                 var response = await _httpClient.PostAsync("/api/EntradaContable", content);
 
+
                 if (response.IsSuccessStatusCode)
                 {
-                    // Agregar mensaje para confirmar que la API de contabilidad recibió los asientos
-                    Console.WriteLine($"Asientos recibidos por la API de contabilidad.");
+                    // Agregar mensaje para confirmar que la API de contabilidad recibió el asiento
+                    Console.WriteLine($"Asiento con descripción '{descripcionConcatenada}' recibido por la API de contabilidad.");
+                    var result = await response.Content.ReadAsStringAsync(); // Leer el contenido de recepcion
+                    Console.WriteLine($"Esto fue la respuesta: {result} ");
+
+                    // Actualizar el estado de los asientos locales a "Enviado" (false)
+                    foreach (var asiento in grupo)
+                    {
+                        asiento.Estado = false; // Cambiamos a false para indicar "enviado"
+                        _context.Entry(asiento).State = EntityState.Modified;
+                    }
+                    await _context.SaveChangesAsync();
+                    Console.WriteLine($"Estado de los asientos para la orden {grupo.Key} actualizado a 'Enviado' (false).");
                 }
                 else
                 {
                     var errorContent = await response.Content.ReadAsStringAsync(); // Leer el contenido de error
-                    throw new Exception($"Error al enviar el asiento a contabilidad. Código de estado: {response.StatusCode}, Contenido: {errorContent}, enviado: {json}");
+                    throw new Exception($"Error al enviar el asiento con descripción '{descripcionConcatenada}' a contabilidad. Código de estado: {response.StatusCode}, Contenido: {errorContent}, enviado: {json}");
                 }
-
-
-
             }
         }
         [HttpGet("EntradaContable")]
@@ -427,7 +338,7 @@ namespace BackEnd_SistemaCompra.Controllers
                     return BadRequest("Encabezado de autorización no encontrado.");
                 }
 
-                var response = await _httpClient.GetAsync("/api/EntradaContable");
+                var response = await _httpClient.GetAsync("/api/EntradaContable?sort=-FechaAsiento&limit=10");
 
                 if (response.IsSuccessStatusCode)
                 {
@@ -452,6 +363,66 @@ namespace BackEnd_SistemaCompra.Controllers
             {
                 return StatusCode(StatusCodes.Status500InternalServerError, $"Error al obtener los datos de la API de contabilidad: {ex.Message}");
             }
+        }
+
+        [HttpGet("CuentaContable")]
+        public async Task<IActionResult> GetCuentaContable()
+        {
+            try
+            {
+                // Obtener el token de autenticación del encabezado de la solicitud
+                if (HttpContext.Request.Headers.ContainsKey("Authorization"))
+                {
+                    string token = HttpContext.Request.Headers["Authorization"].ToString().Replace("Bearer ", "");
+
+                    if (string.IsNullOrEmpty(token))
+                    {
+                        return BadRequest("Token de autenticación no válido o vacío.");
+                    }
+
+                    _httpClient.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", token);
+                }
+                else
+                {
+                    return BadRequest("Encabezado de autorización no encontrado.");
+                }
+
+                var response = await _httpClient.GetAsync("/api/CuentaContable");
+
+                if (response.IsSuccessStatusCode)
+                {
+                    var content = await response.Content.ReadAsStringAsync();
+                    var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
+                    var resultados = JsonSerializer.Deserialize<List<object>>(content, options); // Usar object para la deserialización
+
+                    // Imprimir los resultados en la consola
+                    Console.WriteLine("Resultados de la API de CuentaContable:");
+
+                    Console.WriteLine(JsonSerializer.Serialize(resultados, new JsonSerializerOptions { WriteIndented = true }));
+
+                    return Ok(resultados);
+                }
+                else
+                {
+                    var errorContent = await response.Content.ReadAsStringAsync();
+                    return BadRequest($"Error al obtener los datos de la API de contabilidad. Código de estado: {response.StatusCode}, Contenido: {errorContent}");
+                }
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError, $"Error al obtener los datos de la API de contabilidad: {ex.Message}");
+            }
+        }
+
+        // GET: api/AsientosContables/orden/{idOrdenCompra}
+        [HttpGet("orden/{idOrdenCompra}")]
+        public async Task<ActionResult<IEnumerable<AsientoContable>>> GetAsientosPorOrdenCompra(int idOrdenCompra)
+        {
+            var asientosContables = await _context.Tbl_AsientosContables
+                .Where(a => a.IdOrdenCompra == idOrdenCompra)
+                .ToListAsync();
+
+            return asientosContables;
         }
     }
 }

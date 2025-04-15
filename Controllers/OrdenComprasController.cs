@@ -241,26 +241,28 @@ namespace BackEnd_SistemaCompra.Controllers
             var asientoDebito = new AsientoContable
             {
                 sistemaAuxiliarId = 80,
-                Descripcion = $"Compra registrada - Orden {ordenCompra.Id}",
+                Descripcion = $"Débito de Compra registrada - Orden {ordenCompra.Id}",
                 IdTipoInventario = 1, // Ajusta según tu lógica
                 CuentaContable = "80",
                 TipoMovimiento = "DB",
                 FechaAsiento = DateTime.Now,
                 Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal),
-                Estado = true
+                Estado = true,
+                IdOrdenCompra = ordenCompra.Id
             };
 
             // Crédito en la cuenta 4
             var asientoCredito = new AsientoContable
             {
                 sistemaAuxiliarId = 80, // Puedes usar un ID diferente para el crédito
-                Descripcion = $"Compra registrada - Orden {ordenCompra.Id}",
+                Descripcion = $"Crédito de Compra registrada - Orden {ordenCompra.Id}",
                 IdTipoInventario = 1, // Ajusta según tu lógica
                 CuentaContable = "4",
                 TipoMovimiento = "CR",
                 FechaAsiento = DateTime.Now,
                 Monto = ordenCompra.Detalles.Sum(d => d.CostoTotal),
-                Estado = true
+                Estado = true,
+                IdOrdenCompra = ordenCompra.Id
             };
 
             _context.Tbl_AsientosContables.Add(asientoDebito);

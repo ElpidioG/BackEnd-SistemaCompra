@@ -13,6 +13,8 @@ namespace BackEnd_SistemaCompra.Models
         public DateTime FechaAsiento { get; set; }
         public decimal Monto { get; set; }
         public bool Estado { get; set; }
+
+        public int IdOrdenCompra { get; set; }
     }
 
 }
