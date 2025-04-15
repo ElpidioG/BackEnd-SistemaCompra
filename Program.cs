@@ -28,11 +28,11 @@ namespace BackEnd_SistemaCompra
 
             builder.Services.AddCors(options =>
             {
-                options.AddPolicy("AllowAllOrigins", builder =>
+                options.AddPolicy("AllowFrontend", policy =>
                 {
-                    builder.AllowAnyOrigin()
-                           .AllowAnyMethod()
-                           .AllowAnyHeader();
+                    policy.WithOrigins("http://localhost:3000", "https://810-815buyandgo.azurewebsites.net") // ← tu frontend local
+                          .AllowAnyMethod()
+                          .AllowAnyHeader();
                 });
             });
 
