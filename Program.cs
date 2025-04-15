@@ -43,7 +43,9 @@ namespace BackEnd_SistemaCompra
 
             app.UseHttpsRedirection();
 
-            app.UseCors("AllowAllOrigins");
+            app.UseRouting(); 
+
+            app.UseCors("AllowFrontend");
 
             app.UseAuthorization();
 
