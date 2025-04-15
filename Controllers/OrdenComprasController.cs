@@ -240,7 +240,7 @@ namespace BackEnd_SistemaCompra.Controllers
             // Débito en la cuenta 80
             var asientoDebito = new AsientoContable
             {
-                sistemaAuxiliarId = 80,
+                sistemaAuxiliarId = 7,
                 Descripcion = $"Débito de Compra registrada - Orden {ordenCompra.Id}",
                 IdTipoInventario = 1, // Ajusta según tu lógica
                 CuentaContable = "80",
@@ -254,7 +254,7 @@ namespace BackEnd_SistemaCompra.Controllers
             // Crédito en la cuenta 4
             var asientoCredito = new AsientoContable
             {
-                sistemaAuxiliarId = 80, // Puedes usar un ID diferente para el crédito
+                sistemaAuxiliarId = 7, // Puedes usar un ID diferente para el crédito
                 Descripcion = $"Crédito de Compra registrada - Orden {ordenCompra.Id}",
                 IdTipoInventario = 1, // Ajusta según tu lógica
                 CuentaContable = "4",
